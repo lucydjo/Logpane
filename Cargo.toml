@@ -1,0 +1,74 @@
+[package]
+name = "logpane"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.95"
+description = "Logpane - instant observation capture for macOS"
+license = "MIT"
+authors = ["Logpane contributors"]
+readme = "README.md"
+repository = "https://github.com/lucydjo/Logpane"
+keywords = ["macos", "notes", "screenshot", "egui", "productivity"]
+categories = ["gui", "os::macos-apis"]
+publish = false
+exclude = ["specs/", "Logpane.app", "target/"]
+
+[dependencies]
+anyhow = "1.0.104"
+chrono = { version = "0.4.45", features = ["serde", "clock"] }
+eframe = { version = "0.37.0", default-features = false, features = ["glow"] }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "tiff", "webp"] }
+rusqlite = { version = "0.41.1", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+thiserror = "2.0.21"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1.29.0", features = ["v4", "serde"] }
+directories = "6.0.0"
+global-hotkey = "0.9.0"
+libc = "0.2"
+printpdf = { version = "0.12.8", default-features = false, features = ["images", "png", "jpeg", "tiff", "webp"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.5"
+objc2-app-kit = { version = "0.3.2", features = [
+    "NSAlert",
+    "NSApplication",
+    "NSAppearance",
+    "NSGraphics",
+    "NSEvent",
+    "NSImage",
+    "NSMenu",
+    "NSMenuItem",
+    "NSStatusBar",
+    "NSStatusBarButton",
+    "NSStatusItem",
+    "NSPasteboard",
+    "NSResponder",
+    "NSSavePanel",
+    "NSRunningApplication",
+    "NSScreen",
+    "NSView",
+    "NSWindow",
+] }
+objc2-foundation = { version = "0.3.2", features = [
+    "NSArray",
+    "NSData",
+    "NSDictionary",
+    "NSGeometry",
+    "NSString",
+    "NSThread",
+    "NSURL",
+    "NSValue",
+] }
+
+[dev-dependencies]
+tempfile = "3.14"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

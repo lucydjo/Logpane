@@ -1,0 +1,10 @@
+/target
+/*.app
+/.specify
+/.opencode
+/logpane.sqlite*
+/assets/
+/.lock
+.DS_Store
+*.dSYM
+*.log
