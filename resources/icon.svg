@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Logpane: a pane, a timestamp, a caret. Drawn on the macOS icon grid (824 px body). -->
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22262A"/>
+      <stop offset="1" stop-color="#101214"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#body)"/>
+  <rect x="102" y="102" width="820" height="820" rx="184" fill="none" stroke="#3A4046" stroke-width="4"/>
+  <!-- header rule -->
+  <rect x="100" y="286" width="824" height="6" fill="#2D3237"/>
+  <rect x="196" y="186" width="150" height="26" rx="4" fill="#85888A"/>
+  <rect x="772" y="186" width="56" height="26" rx="4" fill="#4A5158"/>
+  <!-- sidebar rule -->
+  <rect x="676" y="292" width="6" height="632" fill="#2D3237"/>
+  <rect x="728" y="372" width="120" height="22" rx="4" fill="#4A5158"/>
+  <rect x="728" y="430" width="88" height="22" rx="4" fill="#353B41"/>
+  <rect x="728" y="488" width="104" height="22" rx="4" fill="#353B41"/>
+  <!-- timestamp, text, caret -->
+  <rect x="196" y="372" width="132" height="40" rx="5" fill="#C9A972"/>
+  <rect x="356" y="372" width="250" height="40" rx="5" fill="#D2D3CF"/>
+  <rect x="196" y="446" width="320" height="40" rx="5" fill="#D2D3CF"/>
+  <rect x="538" y="434" width="20" height="64" fill="#8FA6B8"/>
+  <!-- pasted screenshot -->
+  <rect x="196" y="556" width="410" height="272" rx="10" fill="#1B1F23" stroke="#3A4046" stroke-width="4"/>
+  <rect x="240" y="720" width="52" height="72" fill="#5A7187"/>
+  <rect x="318" y="676" width="52" height="116" fill="#8FA6B8"/>
+  <rect x="396" y="700" width="52" height="92" fill="#5A7187"/>
+  <rect x="474" y="630" width="52" height="162" fill="#8FA6B8"/>
+</svg>

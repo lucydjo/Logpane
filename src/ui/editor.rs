@@ -1,12 +1,12 @@
 use eframe::egui::{self, Align, FontId, Layout, RichText, Sense, Vec2};
 use uuid::Uuid;
 
-use crate::app::LogpaneApp;
+use crate::app::{LogpaneApp, RemovedBlock};
 use crate::core::models::NoteBlock;
-use crate::strings::STRINGS;
-use crate::ui::format;
+use crate::strings::{EMPTY_HINTS, STRINGS};
 use crate::ui::theme::{margin, margin_xy, surface, ACTION_BAR_HEIGHT, SPACE_L, SPACE_S, SPACE_XS};
 use crate::ui::widgets;
+use crate::ui::{format, highlight};
 
 enum Action {
     RemoveBlock(Uuid),
@@ -24,7 +24,12 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
     let mut insert_time = false;
     let mut insert_image = false;
     let mut export_pdf = false;
+    let mut export_md = false;
+    let mut copy_md = false;
+    let mut toggle_pin = false;
+    let mut undo_remove = false;
     let mut request_delete = false;
+    let pinned = app.is_pinned(note_id);
 
     app.block_rects.clear();
 
@@ -48,6 +53,19 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
                 {
                     insert_image = true;
                 }
+                // The bar keeps its essentials on a narrow window; the rest has a shortcut.
+                let roomy = ui.available_width() > 560.0;
+                if roomy
+                    && widgets::text_button(ui, &palette, STRINGS.copy_md, palette.secondary)
+                        .clicked()
+                {
+                    copy_md = true;
+                }
+                if widgets::text_button(ui, &palette, STRINGS.export_md, palette.secondary)
+                    .clicked()
+                {
+                    export_md = true;
+                }
                 if widgets::text_button(ui, &palette, STRINGS.export_pdf, palette.secondary)
                     .clicked()
                 {
@@ -66,12 +84,23 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
                     {
                         request_delete = true;
                     }
+                    if roomy {
+                        let (label, color) = if pinned {
+                            (STRINGS.unpin, palette.stamp)
+                        } else {
+                            (STRINGS.pin, palette.secondary)
+                        };
+                        if widgets::text_button(ui, &palette, label, color).clicked() {
+                            toggle_pin = true;
+                        }
+                    }
                 });
             });
         });
 
     if let Some(notice) = &app.notice {
         let text = notice.text.clone();
+        let offer_undo = notice.undo;
         surface(&palette, palette.raised)
             .inner_margin(margin(SPACE_S))
             .show(ui, |ui| {
@@ -91,6 +120,12 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
                         .clicked()
                         {
                             app.notice = None;
+                        }
+                        if offer_undo
+                            && widgets::text_button(ui, &palette, STRINGS.undo, palette.stamp)
+                                .clicked()
+                        {
+                            undo_remove = true;
                         }
                     });
                 });
@@ -127,16 +162,28 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
         }
     }
 
-    ui.label(
-        RichText::new(format!(
-            "{} · {} {}",
-            format::date_en(note.created_at.with_timezone(&chrono::Local).date_naive()),
-            STRINGS.modified_at,
-            format::time_en(note.updated_at)
-        ))
-        .size(10.5)
-        .color(palette.secondary),
+    let stats = note.stats();
+    let mut meta = format!(
+        "{} · {} {} · {} {}",
+        format::date_en(note.created_at.with_timezone(&chrono::Local).date_naive()),
+        STRINGS.modified_at,
+        format::time_en(note.updated_at),
+        stats.words,
+        STRINGS.words,
     );
+    if stats.images > 0 {
+        meta.push_str(&format!(" · {} {}", stats.images, STRINGS.images));
+    }
+    ui.horizontal(|ui| {
+        if pinned {
+            ui.label(
+                RichText::new(format!("{} {}", STRINGS.pin_mark, STRINGS.pinned))
+                    .size(10.5)
+                    .color(palette.stamp),
+            );
+        }
+        ui.label(RichText::new(meta).size(10.5).color(palette.secondary));
+    });
     ui.add_space(SPACE_L);
 
     if read_only {
@@ -153,6 +200,15 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
     }
 
     let single_block = note.blocks.len() == 1;
+    let blank = single_block && note.blocks[0].is_empty_text();
+    let body_font = egui::TextStyle::Body.resolve(ui.style());
+    let line_height =
+        ui.fonts_mut(|fonts| fonts.row_height(&body_font)) + ui.spacing().extra_text_line_spacing;
+    let mut layouter = |ui: &egui::Ui, buffer: &dyn egui::TextBuffer, wrap_width: f32| {
+        let mut job = highlight::job(buffer.as_str(), &palette, &body_font, line_height);
+        job.wrap.max_width = wrap_width;
+        ui.fonts_mut(|fonts| fonts.layout_job(job))
+    };
     egui::ScrollArea::vertical()
         .id_salt("editor_scroll")
         .auto_shrink([false, false])
@@ -169,6 +225,7 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
                                 .margin(margin_xy(0.0, SPACE_XS))
                                 .interactive(!read_only)
                                 .lock_focus(true)
+                                .layouter(&mut layouter)
                                 .hint_text(if single_block {
                                     STRINGS.empty_state
                                 } else {
@@ -226,6 +283,9 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
                                         response
                                     });
                                 let response = framed.inner;
+                                if response.hovered() {
+                                    image_hover(ui, &palette, response.rect, &asset);
+                                }
                                 app.block_rects.push((*id, response.rect));
                                 if response.clicked() {
                                     actions.push(Action::Preview(asset_id.clone()));
@@ -284,6 +344,10 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
                 }
             }
 
+            if blank && !read_only {
+                empty_hints(ui, &palette);
+            }
+
             for pending in app.pending.iter().filter(|p| p.note_id == note_id) {
                 let _ = pending;
                 ui.add_space(SPACE_XS);
@@ -299,8 +363,18 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
     for action in actions {
         match action {
             Action::RemoveBlock(id) => {
-                note.blocks.retain(|block| block.id() != id);
-                changed = true;
+                if let Some(index) = note.index_of(id) {
+                    let block = note.blocks.remove(index);
+                    app.offer_undo_remove(
+                        ui.ctx(),
+                        RemovedBlock {
+                            note_id,
+                            index,
+                            block,
+                        },
+                    );
+                    changed = true;
+                }
             }
             Action::Preview(hash) => app.preview = Some(hash),
             Action::Open(hash) => {
@@ -325,7 +399,71 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
     if export_pdf {
         app.export_pdf(ui.ctx());
     }
+    if export_md {
+        app.export_markdown(ui.ctx());
+    }
+    if copy_md {
+        app.copy_markdown(ui.ctx());
+    }
+    if toggle_pin {
+        app.toggle_pin(ui.ctx(), note_id);
+    }
+    if undo_remove {
+        app.undo_remove(ui.ctx());
+    }
     if request_delete {
         app.request_delete(note_id);
+    }
+}
+
+/// Accent outline and a one-line caption while the pointer is over an image.
+fn image_hover(
+    ui: &egui::Ui,
+    palette: &crate::ui::theme::Palette,
+    rect: egui::Rect,
+    asset: &crate::core::assets::AssetRecord,
+) {
+    let painter = ui.painter();
+    painter.rect_stroke(
+        rect,
+        0.0,
+        egui::Stroke::new(1.0, palette.accent),
+        egui::StrokeKind::Inside,
+    );
+    let kind = asset.mime.rsplit('/').next().unwrap_or("image");
+    let caption = format!(
+        "{} × {} · {} · {}",
+        asset.width, asset.height, kind, STRINGS.image_click_hint
+    );
+    let galley = painter.layout_no_wrap(caption, FontId::monospace(10.0), palette.text);
+    let size = galley.size() + Vec2::new(SPACE_S * 2.0, SPACE_XS * 2.0);
+    if size.x + 2.0 > rect.width() || size.y + 2.0 > rect.height() {
+        return;
+    }
+    let label = egui::Rect::from_min_size(
+        egui::pos2(rect.left() + 1.0, rect.bottom() - size.y - 1.0),
+        size,
+    );
+    painter.rect_filled(label, 0.0, palette.panel);
+    painter.galley(
+        label.min + Vec2::new(SPACE_S, SPACE_XS),
+        galley,
+        palette.text,
+    );
+}
+
+/// The few bindings worth knowing, shown only while the note is blank.
+fn empty_hints(ui: &mut egui::Ui, palette: &crate::ui::theme::Palette) {
+    ui.add_space(SPACE_L);
+    for (keys, action) in EMPTY_HINTS {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 0.0;
+            ui.label(
+                RichText::new(format!("{keys:<6}"))
+                    .size(11.5)
+                    .color(palette.accent),
+            );
+            ui.label(RichText::new(*action).size(11.5).color(palette.secondary));
+        });
     }
 }

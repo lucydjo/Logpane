@@ -1,7 +1,8 @@
 use eframe::egui::{self, Align, Id, Layout, RichText};
 
 use crate::app::LogpaneApp;
-use crate::strings::STRINGS;
+use crate::strings::{HELP_GROUPS, STRINGS, SYNTAX_SAMPLES};
+use crate::ui::highlight;
 use crate::ui::theme::{
     margin, margin_xy, surface, HEADER_HEIGHT, SIDEBAR_MAX, SIDEBAR_MIN, SPACE_L, SPACE_M, SPACE_S,
     SPACE_XL, SPACE_XS,
@@ -55,6 +56,7 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
 fn modals(app: &mut LogpaneApp, ctx: &egui::Context) {
     delete_modal(app, ctx);
     preview_modal(app, ctx);
+    help_modal(app, ctx);
 }
 
 fn delete_modal(app: &mut LogpaneApp, ctx: &egui::Context) {
@@ -202,5 +204,80 @@ fn preview_modal(app: &mut LogpaneApp, ctx: &egui::Context) {
     }
     if close {
         app.preview = None;
+    }
+}
+
+/// Shortcut sheet (`⌘/`): three groups of bindings and a sample of the editor tints.
+fn help_modal(app: &mut LogpaneApp, ctx: &egui::Context) {
+    if !app.help_open {
+        return;
+    }
+    let palette = app.palette;
+    let toggle = app.hotkey_label.clone();
+    let mut close = false;
+
+    let response = egui::Modal::new(Id::unique("logpane_help_modal"))
+        .frame(surface(&palette, palette.panel).inner_margin(margin(SPACE_L)))
+        .backdrop_color(egui::Color32::from_black_alpha(110))
+        .show(ctx, |ui| {
+            ui.set_width(430.0);
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(STRINGS.help_title)
+                        .size(12.0)
+                        .color(palette.strong),
+                );
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if widgets::text_button(ui, &palette, STRINGS.close_button, palette.secondary)
+                        .clicked()
+                    {
+                        close = true;
+                    }
+                });
+            });
+
+            for (group, rows) in HELP_GROUPS {
+                ui.add_space(SPACE_M);
+                widgets::section_label(ui, &palette, group);
+                ui.add_space(SPACE_XS);
+                for (keys, action) in *rows {
+                    // The global toggle may have fallen back to another key at startup.
+                    let keys = if *keys == crate::shortcuts::TOGGLE {
+                        toggle.as_str()
+                    } else {
+                        keys
+                    };
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        ui.label(
+                            RichText::new(format!("{keys:<8}"))
+                                .size(12.0)
+                                .color(palette.accent),
+                        );
+                        ui.label(RichText::new(*action).size(12.0).color(palette.text));
+                    });
+                }
+            }
+
+            ui.add_space(SPACE_M);
+            widgets::section_label(ui, &palette, STRINGS.syntax_title);
+            ui.add_space(SPACE_XS);
+            let font = egui::FontId::monospace(12.0);
+            for sample in SYNTAX_SAMPLES {
+                ui.label(highlight::job(sample, &palette, &font, 17.0));
+            }
+            ui.add_space(SPACE_S);
+            ui.label(
+                RichText::new(STRINGS.help_hint)
+                    .size(10.0)
+                    .color(palette.secondary),
+            );
+        });
+
+    if response.backdrop_response.clicked() {
+        close = true;
+    }
+    if close {
+        app.help_open = false;
     }
 }

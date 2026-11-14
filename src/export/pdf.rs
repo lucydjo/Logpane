@@ -565,6 +565,11 @@ fn flatten_on_white(source: image::RgbaImage) -> image::RgbImage {
 
 /// A safe default filename derived from the note title.
 pub fn default_filename(note: &Note) -> String {
+    filename_for(note, "pdf")
+}
+
+/// File name proposed in the save panel: the sanitized title plus `extension`.
+pub fn filename_for(note: &Note, extension: &str) -> String {
     let base = if note.title.trim().is_empty() {
         "logpane-note"
     } else {
@@ -579,12 +584,13 @@ pub fn default_filename(note: &Note) -> String {
         .take(80)
         .collect();
     let sanitized = sanitized.trim().trim_matches('.').trim();
+    let suffix = format!(".{extension}");
     if sanitized.is_empty() {
-        "logpane-note.pdf".to_string()
-    } else if sanitized.to_ascii_lowercase().ends_with(".pdf") {
+        format!("logpane-note{suffix}")
+    } else if sanitized.to_ascii_lowercase().ends_with(&suffix) {
         sanitized.to_string()
     } else {
-        format!("{sanitized}.pdf")
+        format!("{sanitized}{suffix}")
     }
 }
 

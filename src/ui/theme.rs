@@ -18,6 +18,7 @@ pub const HEADER_HEIGHT: f32 = 40.0;
 pub const CONTROL_HEIGHT: f32 = 28.0;
 pub const ROW_HEIGHT: f32 = 54.0;
 pub const ACTION_BAR_HEIGHT: f32 = 30.0;
+pub const FOOTER_HEIGHT: f32 = 24.0;
 pub const SIDEBAR_MIN: f32 = 240.0;
 pub const SIDEBAR_MAX: f32 = 340.0;
 
@@ -85,9 +86,13 @@ pub struct Palette {
     pub panel: Color32,
     pub raised: Color32,
     pub text: Color32,
+    /// Headings and matched search text.
+    pub strong: Color32,
     pub secondary: Color32,
     pub separator: Color32,
     pub accent: Color32,
+    /// Warm counterpoint to the accent: timestamps, open tasks, search matches.
+    pub stamp: Color32,
     pub selection: Color32,
     pub hover: Color32,
     pub danger: Color32,
@@ -105,9 +110,11 @@ impl Palette {
                 panel: Color32::from_rgb(0x15, 0x16, 0x17),
                 raised: Color32::from_rgb(0x19, 0x1B, 0x1C),
                 text: Color32::from_rgb(0xD2, 0xD3, 0xCF),
+                strong: Color32::from_rgb(0xF1, 0xF1, 0xEC),
                 secondary: Color32::from_rgb(0x85, 0x88, 0x8A),
                 separator: Color32::from_rgb(0x23, 0x25, 0x27),
                 accent: Color32::from_rgb(0x8F, 0xA6, 0xB8),
+                stamp: Color32::from_rgb(0xC9, 0xA9, 0x72),
                 selection: Color32::from_rgb(0x26, 0x31, 0x3A),
                 hover: Color32::from_rgb(0x1C, 0x1E, 0x1F),
                 danger: Color32::from_rgb(0xC9, 0x8B, 0x80),
@@ -119,9 +126,11 @@ impl Palette {
                 panel: Color32::from_rgb(0xFA, 0xFA, 0xF8),
                 raised: Color32::from_rgb(0xEF, 0xEF, 0xEB),
                 text: Color32::from_rgb(0x25, 0x27, 0x2A),
+                strong: Color32::from_rgb(0x0B, 0x0C, 0x0E),
                 secondary: Color32::from_rgb(0x67, 0x6A, 0x6E),
                 separator: Color32::from_rgb(0xE2, 0xE2, 0xDD),
                 accent: Color32::from_rgb(0x5A, 0x71, 0x87),
+                stamp: Color32::from_rgb(0x8A, 0x65, 0x22),
                 selection: Color32::from_rgb(0xDC, 0xE4, 0xEA),
                 hover: Color32::from_rgb(0xEC, 0xEC, 0xE7),
                 danger: Color32::from_rgb(0xA7, 0x5C, 0x50),

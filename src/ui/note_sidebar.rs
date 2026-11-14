@@ -3,13 +3,49 @@ use uuid::Uuid;
 
 use crate::app::LogpaneApp;
 use crate::core::models::truncate_chars;
+use crate::core::search;
+use crate::shortcuts;
 use crate::strings::STRINGS;
-use crate::ui::format;
-use crate::ui::theme::{margin_xy, CONTROL_HEIGHT, ROW_HEIGHT, SPACE_M, SPACE_S, SPACE_XS};
+use crate::ui::theme::{
+    margin_xy, CONTROL_HEIGHT, FOOTER_HEIGHT, ROW_HEIGHT, SPACE_M, SPACE_S, SPACE_XS,
+};
 use crate::ui::widgets;
+use crate::ui::{format, highlight};
 
 pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
     let palette = app.palette;
+
+    let total = app.notes.len();
+    let ids = app.filtered_ids();
+    let query = app.search.trim().to_string();
+    let searching = !query.is_empty();
+
+    egui::Panel::bottom("sidebar_footer")
+        .exact_size(FOOTER_HEIGHT)
+        .show_separator_line(true)
+        .frame(egui::Frame::NONE)
+        .show(ui, |ui| {
+            ui.horizontal_centered(|ui| {
+                let unit = if total == 1 {
+                    STRINGS.note_count
+                } else {
+                    STRINGS.notes_count
+                };
+                let count = if searching {
+                    format!("{} / {total} {unit}", ids.len())
+                } else {
+                    format!("{total} {unit}")
+                };
+                ui.label(RichText::new(count).size(10.0).color(palette.secondary));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.label(
+                        RichText::new(format!("{} help", shortcuts::HELP))
+                            .size(10.0)
+                            .color(palette.secondary),
+                    );
+                });
+            });
+        });
 
     widgets::section_label(ui, &palette, STRINGS.notes);
     ui.add_space(SPACE_XS);
@@ -19,7 +55,11 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
         [ui.available_width(), CONTROL_HEIGHT],
         egui::TextEdit::singleline(&mut app.search)
             .id(search_id)
-            .hint_text(STRINGS.search_placeholder)
+            .hint_text(format!(
+                "{} {}",
+                STRINGS.search_placeholder,
+                shortcuts::SEARCH
+            ))
             .margin(margin_xy(SPACE_S, SPACE_XS))
             .font(egui::TextStyle::Body),
     );
@@ -34,7 +74,6 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
     }
     ui.add_space(SPACE_M);
 
-    let ids = app.filtered_ids();
     if ids.is_empty() {
         ui.label(
             RichText::new(STRINGS.no_results)
@@ -46,6 +85,8 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
 
     let mut selected: Option<Uuid> = None;
     let mut delete: Option<Uuid> = None;
+    let mut pin: Option<Uuid> = None;
+    let scroll_to_active = std::mem::take(&mut app.scroll_to_active);
 
     egui::ScrollArea::vertical()
         .id_salt("notes_scroll")
@@ -56,7 +97,12 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
                 let Some(note) = app.note(id) else {
                     continue;
                 };
-                let group = app.date_label(note.updated_at);
+                let is_pinned = !searching && app.is_pinned(id);
+                let group = if is_pinned {
+                    STRINGS.pinned.to_string()
+                } else {
+                    app.date_label(note.updated_at)
+                };
                 if last_group.as_deref() != Some(group.as_str()) {
                     ui.add_space(SPACE_M);
                     widgets::section_label(ui, &palette, &group);
@@ -70,7 +116,22 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
                     truncate_chars(&note.title, 24)
                 };
                 let accessible_title = title.clone();
-                let excerpt = truncate_chars(&note.excerpt(30), 30);
+                let images = note
+                    .blocks
+                    .iter()
+                    .filter(|b| b.asset_id().is_some())
+                    .count();
+                let room = if images > 0 { 24 } else { 30 };
+                let title_match = searching
+                    .then(|| search::find(&title, &query))
+                    .flatten()
+                    .filter(|(_, end)| *end <= 24);
+                // While searching, the excerpt moves to the match so the hit is visible.
+                let (excerpt, excerpt_match) = searching
+                    .then(|| search::snippet(note, &query, room))
+                    .flatten()
+                    .map(|hit| (hit.text, Some((hit.start, hit.end))))
+                    .unwrap_or_else(|| (truncate_chars(&note.excerpt(room), room), None));
                 let time = format::time_en(note.updated_at);
                 let active = id == app.active_id;
 
@@ -104,16 +165,48 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
                         .max_rect(inner)
                         .layout(Layout::top_down(Align::LEFT)),
                 );
-                child.set_clip_rect(inner);
+                // Stay inside the scroll area: a row must not paint over the search field.
+                let clip = inner.intersect(ui.clip_rect());
+                child.set_clip_rect(clip);
                 child.set_max_width(inner.width());
                 child.horizontal(|ui| {
-                    ui.label(RichText::new(title).size(12.5).color(palette.text));
+                    if is_pinned {
+                        ui.spacing_mut().item_spacing.x = SPACE_XS;
+                        ui.label(
+                            RichText::new(STRINGS.pin_mark)
+                                .size(9.0)
+                                .color(palette.stamp),
+                        );
+                    }
+                    ui.label(highlight::matched(
+                        &title,
+                        title_match,
+                        12.5,
+                        if active { palette.strong } else { palette.text },
+                        &palette,
+                    ));
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         ui.label(RichText::new(time).size(10.0).color(palette.secondary));
                     });
                 });
-                if !excerpt.is_empty() {
-                    child.label(RichText::new(excerpt).size(10.5).color(palette.secondary));
+                child.label(highlight::matched(
+                    &excerpt,
+                    excerpt_match,
+                    10.5,
+                    palette.secondary,
+                    &palette,
+                ));
+                if images > 0 {
+                    ui.painter().with_clip_rect(clip).text(
+                        inner.right_bottom(),
+                        egui::Align2::RIGHT_BOTTOM,
+                        format!("{images} {}", STRINGS.images),
+                        egui::FontId::monospace(9.5),
+                        palette.accent,
+                    );
+                }
+                if active && scroll_to_active {
+                    response.scroll_to_me(None);
                 }
 
                 response.widget_info(|| {
@@ -122,7 +215,16 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
                 if response.clicked() {
                     selected = Some(id);
                 }
+                let pin_label = if app.is_pinned(id) {
+                    STRINGS.unpin
+                } else {
+                    STRINGS.pin
+                };
                 response.context_menu(|ui| {
+                    if widgets::text_button(ui, &palette, pin_label, palette.text).clicked() {
+                        pin = Some(id);
+                        ui.close();
+                    }
                     if widgets::text_button(ui, &palette, STRINGS.delete_note, palette.danger)
                         .clicked()
                     {
@@ -135,6 +237,9 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
 
     if let Some(id) = selected {
         app.select_note(ui.ctx(), id);
+    }
+    if let Some(id) = pin {
+        app.toggle_pin(ui.ctx(), id);
     }
     if let Some(id) = delete {
         app.request_delete(id);

@@ -1,6 +1,6 @@
 [package]
 name = "logpane"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.95"
 description = "Logpane - instant observation capture for macOS"
@@ -11,7 +11,7 @@ repository = "https://github.com/lucydjo/Logpane"
 keywords = ["macos", "notes", "screenshot", "egui", "productivity"]
 categories = ["gui", "os::macos-apis"]
 publish = false
-exclude = ["specs/", "Logpane.app", "target/"]
+exclude = ["specs/", "Logpane.app", "target/", "dist/", "docs/"]
 
 [dependencies]
 anyhow = "1.0.104"

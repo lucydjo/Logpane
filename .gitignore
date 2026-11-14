@@ -1,5 +1,6 @@
 /target
 /*.app
+/dist
 /.specify
 /.opencode
 /logpane.sqlite*

@@ -239,6 +239,21 @@ impl Note {
             .collect()
     }
 
+    /// Words, characters and images of the note, for the status line.
+    pub fn stats(&self) -> NoteStats {
+        let mut stats = NoteStats::default();
+        for block in &self.blocks {
+            match block {
+                NoteBlock::Text { text, .. } => {
+                    stats.words += text.split_whitespace().count();
+                    stats.chars += text.chars().filter(|ch| !ch.is_whitespace()).count();
+                }
+                NoteBlock::Image { .. } => stats.images += 1,
+            }
+        }
+        stats
+    }
+
     pub fn text_block(&self, id: Uuid) -> Option<&str> {
         self.blocks
             .iter()
@@ -373,6 +388,14 @@ impl Note {
             NoteBlock::Text { .. } => true,
         })
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct NoteStats {
+    pub words: usize,
+    /// Non-whitespace characters.
+    pub chars: usize,
+    pub images: usize,
 }
 
 impl Default for Note {
@@ -527,6 +550,24 @@ mod tests {
         note.normalize();
         assert_eq!(note.blocks.len(), 1);
         assert!(note.blocks[0].as_text().is_some());
+    }
+
+    #[test]
+    fn stats_count_words_characters_and_images() {
+        let mut note = Note::new();
+        note.blocks = vec![
+            NoteBlock::text("two words\n"),
+            NoteBlock::image("a".repeat(64)),
+            NoteBlock::text("é"),
+        ];
+        assert_eq!(
+            note.stats(),
+            NoteStats {
+                words: 3,
+                chars: 9,
+                images: 1
+            }
+        );
     }
 
     #[test]

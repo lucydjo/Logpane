@@ -26,6 +26,7 @@ use crate::ui::theme::{self, Palette, ThemeMode};
 pub const SETTING_THEME: &str = "theme_mode";
 pub const SETTING_ACTIVE_NOTE: &str = "active_note_id";
 pub const SETTING_GEOMETRY: &str = "window_geometry";
+pub const SETTING_PINNED: &str = "pinned_notes";
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Geometry {
@@ -63,6 +64,15 @@ pub struct Startup {
 pub struct Notice {
     pub text: String,
     pub until: Instant,
+    /// Offer to put back the image block removed last.
+    pub undo: bool,
+}
+
+/// An image block the user just removed, kept until the notice expires.
+pub struct RemovedBlock {
+    pub note_id: Uuid,
+    pub index: usize,
+    pub block: NoteBlock,
 }
 
 pub struct PendingImport {
@@ -84,8 +94,12 @@ pub struct LogpaneApp {
     pub active_id: Uuid,
     pub read_only: HashSet<Uuid>,
 
+    pub pinned: HashSet<Uuid>,
     pub search: String,
     pub focus_search: bool,
+    pub scroll_to_active: bool,
+    pub help_open: bool,
+    removed: Option<RemovedBlock>,
     pub theme_mode: ThemeMode,
     pub palette: Palette,
     applied_theme: Option<(ThemeMode, bool)>,
@@ -121,6 +135,7 @@ pub struct LogpaneApp {
     // Development-only visual capture (`LOGPANE_SCREENSHOT=/path.png`).
     screenshot_path: Option<PathBuf>,
     screenshot_requested: bool,
+    screenshot_warmup: u8,
     screenshot_done: Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -158,6 +173,15 @@ impl LogpaneApp {
             .map(|raw| ThemeMode::parse(raw))
             .unwrap_or_default();
 
+        let pinned: HashSet<Uuid> = loaded
+            .settings
+            .get(SETTING_PINNED)
+            .and_then(|raw| serde_json::from_str::<Vec<Uuid>>(raw).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|id| notes.iter().any(|n| n.id == *id))
+            .collect();
+
         let mut app = Self {
             root,
             writer,
@@ -168,8 +192,12 @@ impl LogpaneApp {
             assets: loaded.assets,
             active_id,
             read_only: loaded.read_only,
+            pinned,
             search: String::new(),
             focus_search: false,
+            scroll_to_active: false,
+            help_open: false,
+            removed: None,
             theme_mode,
             palette: Palette::for_mode(ThemeMode::Dark),
             applied_theme: None,
@@ -183,6 +211,7 @@ impl LogpaneApp {
             notice: warning.map(|text| Notice {
                 text,
                 until: Instant::now() + Duration::from_secs(10),
+                undo: false,
             }),
             visible: false,
             start_visible,
@@ -203,9 +232,11 @@ impl LogpaneApp {
             block_rects: Vec::new(),
             screenshot_path: std::env::var("LOGPANE_SCREENSHOT").ok().map(PathBuf::from),
             screenshot_requested: false,
+            screenshot_warmup: 0,
             screenshot_done: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
         app.focus_block = app.first_text_block(app.active_id);
+        app.apply_demo_state();
         crate::ui::theme::install_fonts(&cc.egui_ctx);
         app.refresh_palette(&cc.egui_ctx);
         app
@@ -248,7 +279,11 @@ impl LogpaneApp {
             }
         }
         let hits = search::search(&self.notes, &self.search);
-        let ids: Vec<Uuid> = hits.into_iter().map(|hit| hit.note_id).collect();
+        let mut ids: Vec<Uuid> = hits.into_iter().map(|hit| hit.note_id).collect();
+        if self.search.trim().is_empty() {
+            // Stable: pinned notes first, each group still by last modification.
+            ids.sort_by_key(|id| !self.pinned.contains(id));
+        }
         self.search_cache = Some((self.search.clone(), self.notes_version, ids.clone()));
         ids
     }
@@ -291,16 +326,104 @@ impl LogpaneApp {
     }
 
     pub fn select_note(&mut self, ctx: &egui::Context, id: Uuid) {
-        if id == self.active_id {
+        self.activate_note(ctx, id, true);
+    }
+
+    /// Make a note current. `focus_editor` is false while the search field drives the list.
+    fn activate_note(&mut self, ctx: &egui::Context, id: Uuid, focus_editor: bool) {
+        if id != self.active_id {
+            self.flush_now();
+            if self.notes.iter().any(|n| n.id == id) {
+                self.active_id = id;
+                self.active_block = self.first_text_block(id);
+                self.persist_setting(SETTING_ACTIVE_NOTE, id.to_string());
+            }
+        }
+        if focus_editor {
+            self.focus_block = self
+                .active_block
+                .or_else(|| self.first_text_block(self.active_id));
+        }
+        ctx.request_repaint();
+    }
+
+    /// Move through the visible list, wrapping at both ends.
+    pub fn select_relative(&mut self, ctx: &egui::Context, delta: isize, focus_editor: bool) {
+        let ids = self.filtered_ids();
+        if ids.is_empty() {
             return;
         }
-        self.flush_now();
-        if self.notes.iter().any(|n| n.id == id) {
-            self.active_id = id;
-            self.active_block = self.first_text_block(id);
-            self.focus_block = self.active_block;
-            self.persist_setting(SETTING_ACTIVE_NOTE, id.to_string());
+        let next = match ids.iter().position(|id| *id == self.active_id) {
+            Some(index) => (index as isize + delta).rem_euclid(ids.len() as isize) as usize,
+            None => 0,
+        };
+        self.scroll_to_active = true;
+        self.activate_note(ctx, ids[next], focus_editor);
+    }
+
+    /// `⏎` in the search field: open the current hit, or the best one, and return to the editor.
+    pub fn open_search_result(&mut self, ctx: &egui::Context) {
+        let ids = self.filtered_ids();
+        let Some(first) = ids.first().copied() else {
+            return;
+        };
+        let target = if ids.contains(&self.active_id) {
+            self.active_id
+        } else {
+            first
+        };
+        self.activate_note(ctx, target, true);
+    }
+
+    pub fn is_pinned(&self, id: Uuid) -> bool {
+        self.pinned.contains(&id)
+    }
+
+    pub fn toggle_pin(&mut self, ctx: &egui::Context, id: Uuid) {
+        if !self.pinned.remove(&id) {
+            self.pinned.insert(id);
         }
+        self.persist_pinned();
+        self.bump_notes_version();
+        ctx.request_repaint();
+    }
+
+    fn persist_pinned(&mut self) {
+        let mut ids: Vec<Uuid> = self.pinned.iter().copied().collect();
+        ids.sort();
+        if let Ok(json) = serde_json::to_string(&ids) {
+            self.persist_setting(SETTING_PINNED, json);
+        }
+    }
+
+    /// Remember an image block removed from the active note and offer to put it back.
+    pub fn offer_undo_remove(&mut self, ctx: &egui::Context, removed: RemovedBlock) {
+        self.removed = Some(removed);
+        self.set_notice(ctx, STRINGS.image_removed);
+        if let Some(notice) = &mut self.notice {
+            notice.undo = true;
+        }
+    }
+
+    pub fn undo_remove(&mut self, ctx: &egui::Context) {
+        self.notice = None;
+        let Some(removed) = self.removed.take() else {
+            return;
+        };
+        if self.read_only.contains(&removed.note_id) {
+            return;
+        }
+        let Some(note) = self.notes.iter_mut().find(|n| n.id == removed.note_id) else {
+            return;
+        };
+        let index = removed.index.min(note.blocks.len());
+        note.blocks.insert(index, removed.block);
+        note.normalize();
+        note.touch();
+        let snapshot = note.clone();
+        self.queue_save(snapshot);
+        note_service::sort_notes(&mut self.notes);
+        self.bump_notes_version();
         ctx.request_repaint();
     }
 
@@ -314,6 +437,12 @@ impl LogpaneApp {
         };
         self.flush_now();
         let was_active = id == self.active_id;
+        if self.pinned.remove(&id) {
+            self.persist_pinned();
+        }
+        if self.removed.as_ref().is_some_and(|r| r.note_id == id) {
+            self.removed = None;
+        }
         let next = note_service::delete_note(&mut self.notes, id);
         self.bump_notes_version();
         if !self.writer.delete_note(id) {
@@ -342,7 +471,8 @@ impl LogpaneApp {
         let note = self.active_note().clone();
         crate::platform::macos::window::activate();
         let default_name = crate::export::default_filename(&note);
-        let Some(path) = crate::platform::macos::save_panel::choose_pdf_path(&default_name) else {
+        let Some(path) = crate::platform::macos::save_panel::choose_path(&default_name, "pdf")
+        else {
             return;
         };
         match crate::export::export_note(&note, &self.assets, &self.root, &path) {
@@ -362,6 +492,45 @@ impl LogpaneApp {
             }
         }
         ctx.request_repaint();
+    }
+
+    pub fn export_markdown(&mut self, ctx: &egui::Context) {
+        self.flush_now();
+        let note = self.active_note().clone();
+        crate::platform::macos::window::activate();
+        let default_name = crate::export::filename_for(&note, "md");
+        let Some(path) = crate::platform::macos::save_panel::choose_path(&default_name, "md")
+        else {
+            return;
+        };
+        match crate::export::export_markdown(&note, &self.assets, &self.root, &path) {
+            Ok(images) => {
+                let name = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("Markdown");
+                let mut text = format!("{}: {name}", STRINGS.exported);
+                if images > 0 {
+                    text.push_str(&format!(" · {images} {}", STRINGS.export_images));
+                }
+                self.set_notice(ctx, text);
+            }
+            Err(error) => {
+                self.set_notice(ctx, format!("{}: {error}", STRINGS.export_failed));
+            }
+        }
+        ctx.request_repaint();
+    }
+
+    /// Put the active note on the clipboard as Markdown, images linked into the asset store.
+    pub fn copy_markdown(&mut self, ctx: &egui::Context) {
+        let markdown = crate::export::to_markdown(
+            self.active_note(),
+            &self.assets,
+            &crate::export::ImageLinks::Store(&self.root),
+        );
+        ctx.copy_text(markdown);
+        self.set_notice(ctx, STRINGS.copied_md);
     }
 
     pub fn insert_timestamp(&mut self, ctx: &egui::Context) {
@@ -686,6 +855,7 @@ impl LogpaneApp {
         self.notice = Some(Notice {
             text: format!("{}: {message}", STRINGS.save_error),
             until: Instant::now() + Duration::from_secs(6),
+            undo: false,
         });
     }
 
@@ -775,6 +945,7 @@ impl LogpaneApp {
         self.notice = Some(Notice {
             text: text.into(),
             until: Instant::now() + Duration::from_secs(6),
+            undo: false,
         });
         ctx.request_repaint_after(Duration::from_secs(6));
     }
@@ -856,21 +1027,65 @@ impl LogpaneApp {
         if let Some(notice) = &self.notice {
             if Instant::now() >= notice.until {
                 self.notice = None;
+                self.removed = None;
             }
         }
     }
 
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         let pressed = shortcuts::read(ctx);
-        let modal_open = self.delete_target.is_some() || self.preview.is_some();
+        let modal_open = self.delete_target.is_some() || self.preview.is_some() || self.help_open;
+        let search_focused = !modal_open
+            && ctx.memory(|memory| memory.focused()) == Some(egui::Id::unique("note_search"));
 
         if pressed.escape {
             if modal_open {
                 self.delete_target = None;
                 self.preview = None;
+                self.help_open = false;
+            } else if search_focused && !self.search.is_empty() {
+                // First Esc leaves the search, the next one hides the overlay.
+                self.search.clear();
+                self.activate_note(ctx, self.active_id, true);
             } else {
                 self.request_hide(ctx);
             }
+            return;
+        }
+        if pressed.help {
+            self.help_open = !self.help_open;
+            ctx.request_repaint();
+            return;
+        }
+        if modal_open {
+            return;
+        }
+        if search_focused {
+            let keys = shortcuts::read_list_keys(ctx);
+            if keys.down || keys.up {
+                self.select_relative(ctx, if keys.down { 1 } else { -1 }, false);
+                return;
+            }
+            if keys.open {
+                self.open_search_result(ctx);
+                return;
+            }
+        }
+        if pressed.next_note || pressed.previous_note {
+            let delta = if pressed.next_note { 1 } else { -1 };
+            self.select_relative(ctx, delta, !search_focused);
+            return;
+        }
+        if pressed.pin {
+            self.toggle_pin(ctx, self.active_id);
+            return;
+        }
+        if pressed.copy_markdown {
+            self.copy_markdown(ctx);
+            return;
+        }
+        if pressed.theme {
+            self.cycle_theme(ctx);
             return;
         }
         if pressed.quit {
@@ -904,7 +1119,6 @@ impl LogpaneApp {
         });
         if (pressed.paste || paste_event)
             && text_focused
-            && !modal_open
             && pasteboard::read_clipboard_image().is_some()
         {
             ctx.input_mut(|input| {
@@ -955,6 +1169,38 @@ impl LogpaneApp {
         STRINGS
     }
 
+    /// Development-only: put the UI in a given state for the documentation captures.
+    /// `LOGPANE_DEMO=search:<query>|help|theme:<dark|light>`, separated by commas.
+    fn apply_demo_state(&mut self) {
+        if !cfg!(debug_assertions) {
+            return;
+        }
+        let Ok(raw) = std::env::var("LOGPANE_DEMO") else {
+            return;
+        };
+        for part in raw.split(',') {
+            match part.split_once(':') {
+                Some(("search", query)) => {
+                    self.search = query.to_string();
+                    self.focus_search = true;
+                    self.focus_block = None;
+                    if let Some(first) = self.filtered_ids().first().copied() {
+                        self.active_id = first;
+                    }
+                }
+                Some(("theme", mode)) => self.theme_mode = ThemeMode::parse(mode),
+                Some(("note", title)) => {
+                    if let Some(note) = self.notes.iter().find(|n| n.title == title) {
+                        self.active_id = note.id;
+                        self.focus_block = self.first_text_block(note.id);
+                    }
+                }
+                _ if part == "help" => self.help_open = true,
+                _ => {}
+            }
+        }
+    }
+
     fn capture_screenshot(&mut self, ctx: &egui::Context) {
         // Development-only hook: never active in a release build.
         if !cfg!(debug_assertions) {
@@ -971,6 +1217,12 @@ impl LogpaneApp {
             return;
         }
         if self.screenshot_requested {
+            return;
+        }
+        // Let thumbnails decode and focus settle before the capture.
+        self.screenshot_warmup += 1;
+        if self.screenshot_warmup < 12 {
+            ctx.request_repaint();
             return;
         }
         self.screenshot_requested = true;

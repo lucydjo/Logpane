@@ -6,7 +6,8 @@ use objc2::MainThreadMarker;
 use objc2_app_kit::{NSModalResponseOK, NSSavePanel};
 use objc2_foundation::{NSArray, NSString};
 
-pub fn choose_pdf_path(default_name: &str) -> Option<PathBuf> {
+/// Ask where to save a file. The chosen path always ends with `extension`.
+pub fn choose_path(default_name: &str, extension: &str) -> Option<PathBuf> {
     let mtm = MainThreadMarker::new()?;
     let panel = NSSavePanel::new(mtm);
     panel.setNameFieldStringValue(&NSString::from_str(default_name));
@@ -14,7 +15,7 @@ pub fn choose_pdf_path(default_name: &str) -> Option<PathBuf> {
 
     #[allow(deprecated)]
     {
-        let types = NSArray::from_retained_slice(&[NSString::from_str("pdf")]);
+        let types = NSArray::from_retained_slice(&[NSString::from_str(extension)]);
         panel.setAllowedFileTypes(Some(&types));
     }
 
@@ -27,10 +28,10 @@ pub fn choose_pdf_path(default_name: &str) -> Option<PathBuf> {
     if path
         .extension()
         .and_then(|extension| extension.to_str())
-        .map(|extension| !extension.eq_ignore_ascii_case("pdf"))
+        .map(|found| !found.eq_ignore_ascii_case(extension))
         .unwrap_or(true)
     {
-        path.set_extension("pdf");
+        path.set_extension(extension);
     }
     Some(path)
 }

@@ -1,26 +1,36 @@
+<p align="center">
+  <img src="docs/icon.png" width="128" alt="Logpane icon">
+</p>
+
 <h1 align="center">Logpane</h1>
 
 <p align="center">
-  <strong>Capture observations at the speed of thought.</strong>
+  <strong>Capture observations at the speed of thought.</strong><br>
+  A resident macOS overlay: one shortcut, type, paste a screenshot, <code>Esc</code>. It is already saved.
 </p>
 
 <p align="center">
-  <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-C98B80?style=flat-square">
-  <img alt="Platform: macOS 12+" src="https://img.shields.io/badge/platform-macOS%2012%2B-8FA6B8?style=flat-square">
+  <a href="https://github.com/lucydjo/Logpane/releases/latest"><img alt="Download" src="https://img.shields.io/github/v/release/lucydjo/Logpane?style=flat-square&amp;label=download&amp;color=8FA6B8"></a>
+  <a href="https://github.com/lucydjo/Logpane/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/lucydjo/Logpane/ci.yml?style=flat-square&amp;label=ci"></a>
+  <img alt="Platform: macOS 12+, Apple Silicon" src="https://img.shields.io/badge/macOS%2012%2B-Apple%20Silicon-5A7187?style=flat-square">
   <img alt="Rust 1.95+" src="https://img.shields.io/badge/rust-1.95%2B-B7410E?style=flat-square&amp;logo=rust&amp;logoColor=white">
-  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-5A7187?style=flat-square">
   <img alt="No network" src="https://img.shields.io/badge/network-none-2D3032?style=flat-square">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-C9A972?style=flat-square">
 </p>
 
-A resident macOS overlay for the moment something worth remembering happens. Press `⌘⇧D`, type
-the observation, paste or drop a screenshot, press `Esc` — it is already saved. No project to
-create, no file to name, no Save button.
-
 <p align="center">
-  <img src="docs/screenshots/dark.png" width="900" alt="Logpane overlay in dark theme, showing a note with an inline chart">
+  <img src="docs/demo.gif" width="900" alt="Logpane: an empty note, a note with a pasted chart, search with highlighted matches, the shortcut sheet, and the light theme">
 </p>
 
 <p align="center"><code>⌘⇧D → type → ⌘V → Esc</code></p>
+
+<table>
+<tr>
+<td width="33%" valign="top"><strong>10 MB, no runtime</strong><br>Rust + egui with a thin AppKit bridge. No Electron, no WebView, no helper process.</td>
+<td width="33%" valign="top"><strong>Zero network</strong><br>No account, no telemetry, no sockets. Notes live in one SQLite file you can copy.</td>
+<td width="33%" valign="top"><strong>Nothing to manage</strong><br>No project, no file name, no Save button. Plain text in, Markdown or PDF out.</td>
+</tr>
+</table>
 
 ---
 
@@ -47,17 +57,24 @@ Logpane is built around one gesture:
 
 ## Features
 
-| Capture | Keep |
-|---|---|
-| Global `⌘⇧D` toggle from any app | SQLite (WAL) with a serialized writer thread |
-| Multiline editor with real text selection | Automatic save, flush before hide/quit |
-| Images from the clipboard (`⌘V`) | SHA-256 content-addressed assets |
-| Drag and drop from Finder or a capture tool | Atomic writes, thumbnails, deduplication |
-| Temporary paths and `file://` URLs | Images survive restart and source deletion |
-| `⌘⇧;` timestamp at the caret | Notes sorted by last modification |
-| `⌘K` search over titles and text | Restored note, theme and window geometry |
-| PDF export with a real text layer and images | Single-instance lock on the data directory |
+| Capture | Find | Keep |
+|---|---|---|
+| Global `⌘⇧D` toggle from any app | `⌘K` search over titles and text | SQLite (WAL), serialized writer thread |
+| Images from the clipboard (`⌘V`) | Matches highlighted, excerpt moved to the hit | Automatic save, flush before hide/quit |
+| Drag and drop from Finder or a capture tool | `↑` `↓` `⏎` to open without the mouse | SHA-256 content-addressed images |
+| `⌘⇧;` timestamp at the caret | `⌥⌘↑` / `⌥⌘↓` previous / next note | Images survive source deletion |
+| Timestamps, `#tags`, `` `code` ``, links, todos tinted as you type | Pinned notes stay on top (`⌘⇧P`) | Markdown export with an assets folder |
+| Undo for a removed image | Notes grouped by day | PDF export with a real text layer |
+| `⌘⇧C` copies the note as Markdown | Word and image counts | Restored note, theme and geometry |
 
+<p align="center">
+  <img src="docs/screenshots/search.png" width="440" alt="Search with the match highlighted in the note list">
+  <img src="docs/screenshots/help.png" width="440" alt="Shortcut sheet opened with ⌘/">
+</p>
+
+- **Plain text, tinted.** Notes are stored exactly as typed. A leading `09:15 —`, `#tags`,
+  `` `code` ``, links, `# headings`, `> quotes` and `- [ ]` / `- [x]` tasks are coloured as a
+  reading aid; nothing is hidden or rewritten.
 - **Terminal-like by design.** SF Mono everywhere, square corners, 1 px rules, low-contrast
   surfaces and one spacing scale. It looks like a tool, not a dashboard.
 - **Native, not wrapped.** Rust + egui/eframe, with a small AppKit bridge for the floating window,
@@ -82,6 +99,19 @@ Logpane is built around one gesture:
 
 Intel Macs are not supported. No Node, Homebrew formula or external service is required.
 
+### Download
+
+Grab the `.dmg` from the [latest release](https://github.com/lucydjo/Logpane/releases/latest),
+drag **Logpane** to Applications, then remove the quarantine flag once:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Logpane.app
+```
+
+The build is **ad-hoc signed, not notarised** (there is no Developer ID yet), so Gatekeeper
+blocks it until that flag is removed. Each release lists SHA-256 sums; if you would rather not
+trust a binary, build it yourself — it takes about a minute.
+
 ### From source
 
 ```bash
@@ -94,18 +124,15 @@ cargo run -- --show       # development: show the window immediately
 Build a local `.app`:
 
 ```bash
-./scripts/build-app.sh
+./scripts/build-app.sh            # Logpane.app
+./scripts/build-app.sh --dist     # also dist/Logpane-<version>-arm64.{dmg,zip}
 open Logpane.app
 ```
-
-The bundle is **ad-hoc signed for local use only**. There is no signed or notarised binary and no
-app icon yet, so a copy downloaded from the internet will be rejected by Gatekeeper. Build it
-yourself.
 
 ### Verify the build
 
 ```bash
-cargo test --locked       # 84 tests: model, search, assets, persistence, PDF export, migrations
+cargo test --locked       # 100 tests: model, tints, search, assets, persistence, exports, migrations
 cargo clippy --all-targets -- -D warnings
 cargo fmt --all -- --check
 ./target/debug/logpane --smoke-test
@@ -120,10 +147,15 @@ the active note. Press the shortcut again, `Esc`, `⌘W` or `[x]` to hide it.
 ```text
 ⌘⇧D        show / hide the overlay
 ⌘N         new note
-⌘K         focus search
+⌘K         search — ↑ ↓ to move, ⏎ to open, Esc to leave
+⌥⌘↑ / ⌥⌘↓  previous / next note
+⌘⇧P        pin / unpin the note
 ⌘⇧;        insert HH:mm — at the caret
 ⌘V         paste text, or import an image from the clipboard
+⌘⇧C        copy the note as Markdown
 ⌘Z / ⌘⇧Z   undo / redo text
+⌘⇧L        cycle theme
+⌘/         shortcut sheet
 ⌘Q         quit (or use the menu-bar icon → Quit Logpane)
 ```
 
@@ -139,17 +171,21 @@ field keeps normal text behaviour. When the clipboard holds both text and a pict
 after copying spreadsheet cells, the text is pasted; if that text is only the address of the
 image, the picture is imported.
 
-### PDF export
+### Export
 
-`[ export pdf ]` in the action bar opens a native save panel and writes the current note as an
-A4 PDF. Text stays as text (selectable and extractable), images are embedded without JPEG
-artifacts, and the reading order follows the document. The PDF is readable by `pdftotext` and LLM
-ingestion tools; metadata carries the title, author and dates.
+- `[ export md ]` writes `<title>.md` and copies the note images into `<title>.assets/` next to
+  it. The body is your text, unchanged; images become ordinary `![…](…)` links.
+- `⌘⇧C` / `[ copy md ]` puts the same Markdown on the clipboard, with image links pointing into
+  the local asset store — handy for pasting into an issue draft, an editor or an LLM.
+- `[ export pdf ]` writes an A4 PDF. Text stays as text (selectable and extractable), images are
+  embedded without JPEG artifacts, and the reading order follows the document. The PDF is
+  readable by `pdftotext` and LLM ingestion tools; metadata carries the title, author and dates.
 
 ### Notes
 
-The sidebar lists notes by last modification, grouped by day. `⌘K` filters on titles and body
-text, ignoring case and common Latin accents. Deleting a note asks for confirmation; deleting the last note
+The sidebar lists notes by last modification, grouped by day, with pinned notes on top. `⌘K`
+filters on titles and body text, ignoring case and common Latin accents; the match is highlighted
+and the excerpt moves to it. Right-click a note to pin or delete it. Deleting a note asks for confirmation; deleting the last note
 leaves a blank one so the editor always has a document.
 
 ## Themes
@@ -157,11 +193,10 @@ leaves a blank one so the editor always has a document.
 The theme control in the header cycles `system → dark → light` and is remembered across launches.
 The first run follows the macOS appearance.
 
-<details>
-<summary>Light theme</summary>
-<br>
-<img src="docs/screenshots/light.png" width="900" alt="Logpane overlay in light theme">
-</details>
+<p align="center">
+  <img src="docs/screenshots/dark.png" width="440" alt="Logpane in dark theme">
+  <img src="docs/screenshots/light.png" width="440" alt="Logpane in light theme">
+</p>
 
 ## How it works
 
@@ -217,16 +252,16 @@ quit it and delete the folder.
 
 ## Status
 
-**Alpha.** The domain, storage and image layers are covered by 84 automated tests, and the app has
+**Alpha.** The domain, storage, export and image layers are covered by 100 automated tests, and the app has
 been validated by hand on a real Apple Silicon Mac; [`TODO.md`](TODO.md) lists every check.
 
 Not there yet:
 
-- `⌘Z` undoes text, not image-block insertion or removal.
+- `⌘Z` undoes text only. A removed image has its own `[ undo ]`; an inserted one does not.
 - HEIC/HEIF is not decoded (PNG, JPEG, TIFF and WebP are).
 - The enlarged preview uses the thumbnail, not the original.
-- No signed/notarised build, no app icon.
-- No Markdown or ZIP export, no cloud sync, no configurable shortcut. PDF export exists.
+- No notarised build: releases are ad-hoc signed and need the quarantine flag removed.
+- No ZIP backup, no cloud sync, no configurable shortcut.
 - No auto-hide on deactivation and no “pin” mode.
 - Full keyboard traversal and VoiceOver coverage are incomplete.
 - Emoji are kept in the note but not displayed, and PDF exports show them as `□`.
@@ -263,12 +298,17 @@ src/
 ├── shortcuts.rs         key labels, global codes and local detection
 ├── strings.rs           English UI strings
 ├── fsutil.rs            private-by-default permissions
-├── core/                pure domain: models, note service, autosave, search, assets
+├── core/                pure domain: models, note service, autosave, search, tints, assets
 ├── storage/             SQLite schema, migrations, writer thread
 ├── ui/                  egui shell, header, editor, sidebar, themes, widgets
-├── export/              PDF export (text layer + embedded images)
+├── export/              Markdown and PDF export
 └── platform/macos/      window, hotkey, pasteboard, menu bar, save panel, alerts
 ```
+
+`./scripts/screenshots.sh` regenerates every image of this page from synthetic notes
+(`examples/seed_demo.rs`); `./scripts/build-icon.sh` rebuilds the icon from `resources/icon.svg`.
+Pushing a `v*` tag runs [`release.yml`](.github/workflows/release.yml), which packages the app
+and publishes the release.
 
 CI runs `fmt`, `clippy -D warnings`, `test --locked` and a release build on macOS
 ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)). The project is macOS-only; other

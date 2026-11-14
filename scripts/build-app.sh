@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build an unsigned local Logpane.app bundle for Apple Silicon.
+# Build a local Logpane.app bundle for Apple Silicon (ad-hoc signed).
+# With --dist, also write dist/Logpane-<version>-arm64.{zip,dmg} and their SHA-256 sums.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -17,6 +18,7 @@ echo "==> assembling ${BUNDLE}"
 rm -rf "${BUNDLE}"
 mkdir -p "${BUNDLE}/Contents/MacOS" "${BUNDLE}/Contents/Resources"
 cp "${BIN}" "${BUNDLE}/Contents/MacOS/${APP_NAME}"
+cp resources/Logpane.icns "${BUNDLE}/Contents/Resources/Logpane.icns"
 
 cat > "${BUNDLE}/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -26,6 +28,8 @@ cat > "${BUNDLE}/Contents/Info.plist" <<'PLIST'
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleExecutable</key>
+    <string>Logpane</string>
+    <key>CFBundleIconFile</key>
     <string>Logpane</string>
     <key>CFBundleIdentifier</key>
     <string>io.github.lucydjo.logpane</string>
@@ -66,3 +70,18 @@ fi
 
 echo "==> built ${BUNDLE}"
 echo "    open ${BUNDLE}"
+
+if [[ "${1:-}" == "--dist" ]]; then
+    DIST="dist"
+    NAME="${APP_NAME}-${VERSION}-arm64"
+    rm -rf "${DIST}"
+    mkdir -p "${DIST}/dmg"
+    echo "==> packaging ${DIST}/${NAME}.{zip,dmg}"
+    ditto -c -k --keepParent "${BUNDLE}" "${DIST}/${NAME}.zip"
+    cp -R "${BUNDLE}" "${DIST}/dmg/"
+    ln -s /Applications "${DIST}/dmg/Applications"
+    hdiutil create -quiet -volname "${APP_NAME}" -srcfolder "${DIST}/dmg" -ov -format UDZO \
+        "${DIST}/${NAME}.dmg"
+    rm -rf "${DIST}/dmg"
+    (cd "${DIST}" && shasum -a 256 "${NAME}.zip" "${NAME}.dmg" > SHA256SUMS.txt && cat SHA256SUMS.txt)
+fi

@@ -1,6 +1,8 @@
 //! English UI strings. Lowercase, bracket-delimited labels keep the terminal language coherent.
 //! One struct keeps a future translation pass mechanical.
 
+use crate::shortcuts;
+
 pub struct Strings {
     pub app_name: &'static str,
     pub saved: &'static str,
@@ -44,6 +46,28 @@ pub struct Strings {
     pub exported: &'static str,
     pub export_failed: &'static str,
     pub export_chars_replaced: &'static str,
+    pub export_md: &'static str,
+    pub copy_md: &'static str,
+    pub copied_md: &'static str,
+    pub export_images: &'static str,
+    pub pin: &'static str,
+    pub unpin: &'static str,
+    pub pinned: &'static str,
+    pub pin_mark: &'static str,
+    pub image_removed: &'static str,
+    pub undo: &'static str,
+    pub help_button: &'static str,
+    pub help_title: &'static str,
+    pub help_hint: &'static str,
+    pub words: &'static str,
+    pub images: &'static str,
+    pub note_count: &'static str,
+    pub notes_count: &'static str,
+    pub image_click_hint: &'static str,
+    pub group_capture: &'static str,
+    pub group_notes: &'static str,
+    pub group_window: &'static str,
+    pub syntax_title: &'static str,
 }
 
 pub const EN: Strings = Strings {
@@ -89,6 +113,80 @@ pub const EN: Strings = Strings {
     exported: "exported",
     export_failed: "export failed",
     export_chars_replaced: "characters without a font, shown as □",
+    export_md: "[ export md ]",
+    copy_md: "[ copy md ]",
+    copied_md: "copied as markdown",
+    export_images: "images",
+    pin: "[ pin ]",
+    unpin: "[ unpin ]",
+    pinned: "pinned",
+    pin_mark: "◆",
+    image_removed: "image removed",
+    undo: "[ undo ]",
+    help_button: "[?]",
+    help_title: "keyboard",
+    help_hint: "notes are plain text — the tints below are only a reading aid.",
+    words: "words",
+    images: "img",
+    note_count: "note",
+    notes_count: "notes",
+    image_click_hint: "click to enlarge",
+    group_capture: "capture",
+    group_notes: "notes",
+    group_window: "window",
+    syntax_title: "tints",
 };
 
 pub const STRINGS: &Strings = &EN;
+
+/// One line of the shortcut sheet: keys, then what they do.
+pub type HelpRow = (&'static str, &'static str);
+
+/// Shortcut sheet shown by `⌘/`, grouped. Labels come from `shortcuts` so they cannot drift.
+pub const HELP_GROUPS: &[(&str, &[HelpRow])] = &[
+    (
+        EN.group_capture,
+        &[
+            (shortcuts::TOGGLE, "show / hide from any app"),
+            (shortcuts::PASTE, "paste text or a screenshot"),
+            (shortcuts::INSERT_TIME, "timestamp at the caret"),
+            (shortcuts::COPY_MARKDOWN, "copy the note as markdown"),
+        ],
+    ),
+    (
+        EN.group_notes,
+        &[
+            (shortcuts::NEW_NOTE, "new note"),
+            (shortcuts::SEARCH, "search · ↑ ↓ then ⏎"),
+            (shortcuts::PREVIOUS_NOTE, "previous note"),
+            (shortcuts::NEXT_NOTE, "next note"),
+            (shortcuts::PIN, "pin / unpin"),
+        ],
+    ),
+    (
+        EN.group_window,
+        &[
+            (shortcuts::HIDE_ALT, "hide — it is already saved"),
+            (shortcuts::THEME, "cycle theme"),
+            (shortcuts::HELP, "this sheet"),
+            (shortcuts::QUIT, "quit"),
+        ],
+    ),
+];
+
+/// Examples of what the editor tints, shown in the shortcut sheet.
+pub const SYNTAX_SAMPLES: &[&str] = &[
+    "09:15 — observation",
+    "#tag  `code`  https://link",
+    "# heading",
+    "- [ ] todo   - [x] done",
+    "> quote",
+];
+
+/// The few bindings shown in an empty note.
+pub const EMPTY_HINTS: &[HelpRow] = &[
+    (shortcuts::PASTE, "paste a screenshot"),
+    (shortcuts::INSERT_TIME, "timestamp"),
+    (shortcuts::SEARCH, "search"),
+    (shortcuts::HELP, "all shortcuts"),
+];

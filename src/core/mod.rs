@@ -4,6 +4,7 @@
 
 pub mod assets;
 pub mod autosave;
+pub mod highlight;
 pub mod models;
 pub mod note_service;
 pub mod search;

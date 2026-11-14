@@ -1,6 +1,6 @@
 # TODO — Logpane
 
-Last updated: 2026-11-06 (open-source preparation pass)
+Last updated: 2026-11-14 (0.2.0: tints, Markdown export, pins, keyboard navigation, icon, releases)
 
 ## Status
 
@@ -35,7 +35,7 @@ Done in the publication pass:
 
 ## Verified automatically
 
-- `cargo test --locked`: 84 tests green (block model, search, assets, persistence, PDF export, migrations).
+- `cargo test --locked`: 100 tests green (block model, tints, search, assets, persistence, Markdown and PDF export, migrations).
 - `cargo clippy --all-targets -- -D warnings`: clean.
 - `cargo fmt --all -- --check`: clean.
 - `cargo build --release --locked`: arm64 binary produced.
@@ -73,13 +73,13 @@ All validated by the maintainer on 2026-11-06.
 
 ## Known limitations
 
-1. **Structural undo**: `⌘Z` undoes text, not image-block insertion or removal.
+1. **Structural undo**: `⌘Z` undoes text only; a removed image has its own `[ undo ]`, an inserted one does not.
 2. **HEIC/HEIF** is not decoded.
 3. **Enlarged preview** uses the 1600 × 1200 thumbnail, not the original.
-4. **Export**: PDF export exists; Markdown/ZIP export and confirmed orphan-asset cleanup are future work.
+4. **Export**: PDF and Markdown export exist; ZIP backup and confirmed orphan-asset cleanup are future work.
 5. **Shortcut not configurable**: `⌘⇧J` is used only if macOS refuses `⌘⇧D`; a conflict with another
    app is not detected.
-6. **No signed/notarised build** and no app icon yet. The local bundle is ad-hoc signed only.
+6. **No notarised build**. Bundles and releases are ad-hoc signed only.
 7. **Accessibility**: list rows expose an accessible label, but full keyboard traversal and
    VoiceOver coverage are incomplete.
 8. **No persistent log**: diagnostics go to stderr when launched from a terminal.
@@ -96,12 +96,24 @@ These numbers come from manual runs, not from an automated benchmark:
 | Storage smoke test (no UI) | 0.32 s |
 | Idle CPU, overlay hidden (`ps` average over 10 s) | 0.4–0.6 % (including startup) |
 | Resident memory (RSS), 4 s after launch | 93 MB hidden, 141 MB with the window open |
-| Release binary, arm64, stripped | 9.6 MB |
+| Release binary, arm64, stripped | 9.9 MB (0.2.0) |
 | Overlay show latency from the resident process (target ≤ 150 ms) | not measured interactively |
 
 ## Next steps
 
-1. Add structural undo for blocks.
-2. Add a UI integration test (`kittest`) for typing, paste focus and drop order.
-3. Design and license an app icon; add notarisation when a Developer ID is available.
-4. Markdown export with its asset folder, then confirmed orphan cleanup.
+1. Validate the 0.2.0 interactions by hand on the target Mac (see below), then tag `v0.2.0`.
+2. Add structural undo for image insertion.
+3. Add a UI integration test (`kittest`) for typing, paste focus and drop order.
+4. Notarisation when a Developer ID is available; a Homebrew cask once a release exists.
+5. Confirmed orphan-asset cleanup; configurable global shortcut.
+
+## 0.2.0 — to validate manually
+
+Verified so far by automated tests and by captures of the debug build only.
+
+- [ ] `⌥⌘↑` / `⌥⌘↓`, and `↑` `↓` `⏎` `Esc` in the search field.
+- [ ] `⌘⇧P`, `⌘⇧C`, `⌘⇧L`, `⌘/` from a focused text block.
+- [ ] `[ export md ]` through the native save panel, with and without images.
+- [ ] Remove an image, then `[ undo ]`.
+- [ ] Typing feel and caret position in a long note with tints.
+- [ ] `./scripts/build-app.sh --dist`: icon shown in Finder, `.dmg` opens.

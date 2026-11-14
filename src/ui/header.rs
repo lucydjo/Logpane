@@ -13,7 +13,7 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
     let rect = ui.max_rect();
     let drag_rect = egui::Rect::from_min_max(
         rect.min,
-        egui::pos2((rect.max.x - 190.0).max(rect.min.x), rect.max.y),
+        egui::pos2((rect.max.x - 230.0).max(rect.min.x), rect.max.y),
     );
     let drag = ui.interact(drag_rect, egui::Id::unique("titlebar_drag"), Sense::drag());
     if drag.drag_started() {
@@ -50,6 +50,11 @@ pub fn show(app: &mut LogpaneApp, ui: &mut egui::Ui) {
             if widgets::text_button(ui, &palette, STRINGS.close_button, palette.secondary).clicked()
             {
                 app.hide_window(ui.ctx());
+            }
+
+            if widgets::text_button(ui, &palette, STRINGS.help_button, palette.secondary).clicked()
+            {
+                app.help_open = !app.help_open;
             }
 
             if widgets::text_button(

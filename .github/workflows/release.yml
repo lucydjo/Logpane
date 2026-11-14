@@ -1,0 +1,60 @@
+name: Release
+
+# Push a tag such as v0.2.0 to build the app and attach it to a GitHub release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: Package (arm64)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@1.99.1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check that the tag matches Cargo.toml
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          test "v${version}" = "${GITHUB_REF_NAME}" || {
+            echo "tag ${GITHUB_REF_NAME} does not match Cargo.toml version ${version}" >&2
+            exit 1
+          }
+
+      - name: Tests
+        run: cargo test --locked
+
+      - name: Build and package
+        run: ./scripts/build-app.sh --dist
+
+      - name: Release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="[${version}]" '$1 == "##" { on = ($2 == v) } on' CHANGELOG.md | tail -n +2 > notes.md
+          cat >> notes.md <<'NOTE'
+
+          ---
+
+          **Install.** Open the `.dmg`, drag Logpane to Applications, then run once:
+
+          ```bash
+          xattr -dr com.apple.quarantine /Applications/Logpane.app
+          ```
+
+          The build is ad-hoc signed, not notarised: macOS blocks it until the quarantine flag is
+          removed. Apple Silicon only. Checksums are in `SHA256SUMS.txt`.
+          NOTE
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/*.dmg dist/*.zip dist/SHA256SUMS.txt \
+            --title "Logpane ${GITHUB_REF_NAME#v}" --notes-file notes.md
